@@ -1,24 +1,21 @@
-# bot.py — جاهز للنسخ واللصق
+# bot.py — نسخة جاهزة للعمل على Render باستخدام Polling
 import os
 import json
 import random
+import asyncio
+import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import nest_asyncio
 
-# حل مشاكل event loop على Render
-nest_asyncio.apply()
-
-# === التوكن الخاص بك ===
-BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6OeM"
+# === توكن البوت ===
+BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
 # === تحميل الاقتباسات ===
 with open("quotes.json", "r", encoding="utf-8") as f:
     quotes_data = json.load(f)
 all_quotes = [(author, q) for author, quotes in quotes_data.items() for q in quotes]
 
-# === ملفات التخزين ===
+# === ملفات تخزين بسيطة ===
 SUBSCRIBERS_FILE = "subscribers.json"
 SCORES_FILE = "scores.json"
 
@@ -55,7 +52,7 @@ def add_point(user_id, username):
 # === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 مرحبا! /game للعبة، /daily_on للاشتراك بالاقتباس اليومي."
+        "👋 مرحبا! استخدم /game للعبة، /daily_on للاشتراك بالاقتباس اليومي."
     )
 
 async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,6 +84,12 @@ async def send_daily(app):
         except Exception as e:
             print("Send error:", e)
 
+async def daily_scheduler(app):
+    await asyncio.sleep(10)  # الانتظار قبل أول إرسال
+    while True:
+        await send_daily(app)
+        await asyncio.sleep(24 * 60 * 60)  # كل 24 ساعة
+
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
     wrong = list(quotes_data.keys())
@@ -109,25 +112,25 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-# === التشغيل مع APScheduler ===
+# === التشغيل مع Polling لتجنب مشاكل event loop على Render ===
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # إضافة الهاندلرز
+    # handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("daily_on", daily_on))
     app.add_handler(CommandHandler("daily_off", daily_off))
     app.add_handler(CommandHandler("game", game))
     app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
 
-    # إعداد المجدول اليومي
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(lambda: asyncio.create_task(send_daily(app)), 'interval', hours=24)
-    scheduler.start()
+    # ابدأ المجدول كـ background task
+    asyncio.create_task(daily_scheduler(app))
 
-    print("🚀 البوت شغال الآن مع polling...")
+    # تشغيل polling
     await app.run_polling()
 
 if __name__ == "__main__":
+    import nest_asyncio
+    nest_asyncio.apply()
     import asyncio
-    asyncio.run(main())
+    asyncio.get_event_loop().run_until_complete(main())
