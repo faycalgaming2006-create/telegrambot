@@ -1,4 +1,4 @@
-# bot.py — نسخة جاهزة للعمل على Render أو أي سيرفر باستخدام Polling
+# bot.py — نسخة جاهزة للعمل على Render باستخدام Polling
 import os
 import json
 import random
@@ -6,7 +6,7 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# === التوكن ===
+# === عيّن توكن البوت هنا ===
 BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
 # === تحميل الاقتباسات ===
@@ -50,35 +50,42 @@ def add_point(user_id, username):
 
 # === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 أهلاً بك في بوت الحكمة والفلسفة!\n"
-        "اضغط على زر اللعبة أدناه لتبدأ تحدي معرفة الاقتباسات.\n"
-        "وللاشتراك بالاقتباس اليومي: /daily_on"
-    )
+    keyboard = [
+        [InlineKeyboardButton("🎮 اللعبة", callback_data="game_start")],
+        [InlineKeyboardButton("☀️ الاقتباس اليومي", callback_data="daily_toggle")]
+    ]
+    if update.message:
+        await update.message.reply_text(
+            "👋 مرحبا بك في بوت الحكمة واللعب!\nاختر أحد الخيارات أدناه:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    elif update.callback_query:
+        await update.callback_query.message.reply_text(
+            "👋 مرحبا بك في بوت الحكمة واللعب!\nاختر أحد الخيارات أدناه:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
-async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+async def daily_on(uid):
     if uid not in subscribers:
         subscribers.append(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("✅ تم الاشتراك في الاقتباس اليومي.")
+        return "✅ تم الاشتراك في الاقتباس اليومي."
     else:
-        await update.message.reply_text("أنت مشترك بالفعل.")
+        return "أنت مشترك بالفعل."
 
-async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+async def daily_off(uid):
     if uid in subscribers:
         subscribers.remove(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("❌ تم إلغاء الاشتراك.")
+        return "❌ تم إلغاء الاشتراك."
     else:
-        await update.message.reply_text("أنت لست مشتركاً.")
+        return "أنت لست مشتركاً."
 
 async def send_daily(app):
     if not subscribers:
         return
     author, quote = random.choice(all_quotes)
-    text = f"☀️ اقتباس اليوم:\n\n«{quote}»\n\n— {author}"
+    text = f"☀️ اقتباس اليوم:\n\n«{quote}»\n— {author}"
     for uid in subscribers:
         try:
             await app.bot.send_message(chat_id=uid, text=text)
@@ -86,13 +93,12 @@ async def send_daily(app):
             print("Send error:", e)
 
 async def daily_scheduler(app):
-    await asyncio.sleep(10)  # أول إرسال بعد 10 ثواني
+    await asyncio.sleep(10)  # أول تنفيذ بعد 10 ثواني
     while True:
         await send_daily(app)
         await asyncio.sleep(24 * 60 * 60)  # كل 24 ساعة
 
-# === لعبة معرفة الاقتباس ===
-async def game(update_or_query, context):
+async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
     wrong = list(quotes_data.keys())
     if author in wrong:
@@ -101,13 +107,14 @@ async def game(update_or_query, context):
     random.shuffle(options)
     keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
 
-    if hasattr(update_or_query, "message") and update_or_query.message:  # رسالة عادية
-        await update_or_query.message.reply_text(
+    # التعامل مع message أو callback_query
+    if update.message:
+        await update.message.reply_text(
             f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-    else:  # CallbackQuery
-        await update_or_query.message.reply_text(
+    elif update.callback_query:
+        await update.callback_query.message.reply_text(
             f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -124,32 +131,30 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-# زر للعبة في /start
-async def start_game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    if q:
-        await q.answer()
-    await game(update, context)
+    await q.answer()
+    uid = q.from_user.id
+    if q.data == "game_start":
+        await game(update, context)
+    elif q.data == "daily_toggle":
+        msg = await daily_on(uid) if uid not in subscribers else await daily_off(uid)
+        await q.edit_message_text(msg)
 
-# === تشغيل البوت ===
+# === التشغيل ===
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
-
-    # handlers
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("daily_on", daily_on))
-    app.add_handler(CommandHandler("daily_off", daily_off))
-    app.add_handler(CommandHandler("game", game))
-    app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
-    app.add_handler(CallbackQueryHandler(start_game_callback, pattern="start_game"))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(game_start|daily_toggle|game:)"))
 
-    # المجدول كـ background task
+    # جدولة الاقتباسات اليومية
     asyncio.create_task(daily_scheduler(app))
 
-    # تشغيل البوت باستخدام Polling لتجنب مشاكل Webhook وEvent Loop
+    # تشغيل البوت بالـ polling لتجنب مشاكل Render مع Webhook
     await app.run_polling()
 
 if __name__ == "__main__":
     import nest_asyncio
-    nest_asyncio.apply()  # يسمح بتشغيل asyncio ضمن Render
+    nest_asyncio.apply()  # لحل مشاكل event loop
+    import asyncio
     asyncio.run(main())
