@@ -1,85 +1,79 @@
-# bot.py — نسخة جاهزة للعمل على Render باستخدام Polling
+# bot.py
 import os
 import json
 import random
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+import nest_asyncio
 
-# === عيّن توكن البوت هنا ===
+nest_asyncio.apply()
+
+# ======= التوكن =======
 BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
-# === تحميل الاقتباسات ===
-with open("quotes.json", "r", encoding="utf-8") as f:
+# ======= ملفات التخزين =======
+SUBSCRIBERS_FILE = "subscribers.json"
+SCORES_FILE = "scores.json"
+QUOTES_FILE = "quotes.json"
+
+# ======= تحميل الاقتباسات =======
+with open(QUOTES_FILE, "r", encoding="utf-8") as f:
     quotes_data = json.load(f)
 all_quotes = [(author, q) for author, quotes in quotes_data.items() for q in quotes]
 
-# === ملفات تخزين بسيطة ===
-SUBSCRIBERS_FILE = "subscribers.json"
-SCORES_FILE = "scores.json"
-
-def load_subscribers():
-    if os.path.exists(SUBSCRIBERS_FILE):
-        with open(SUBSCRIBERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-def save_subscribers(s):
-    with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(s, f)
-
-def load_scores():
-    if os.path.exists(SCORES_FILE):
-        with open(SCORES_FILE, "r", encoding="utf-8") as f:
+# ======= وظائف التخزين =======
+def load_json(file):
+    if os.path.exists(file):
+        with open(file, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-def save_scores(s):
-    with open(SCORES_FILE, "w", encoding="utf-8") as f:
-        json.dump(s, f)
+def save_json(file, data):
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f)
 
-subscribers = load_subscribers()
-scores = load_scores()
+subscribers = load_json(SUBSCRIBERS_FILE).get("subs", [])
+scores = load_json(SCORES_FILE)
 
 def add_point(user_id, username):
     uid = str(user_id)
     if uid not in scores:
         scores[uid] = {"username": username, "points": 0}
     scores[uid]["points"] += 1
-    save_scores(scores)
+    save_json(SCORES_FILE, scores)
 
-# === أوامر البوت ===
+# ======= أوامر البوت =======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("🎮 اللعبة", callback_data="game_start")],
-        [InlineKeyboardButton("☀️ الاقتباس اليومي", callback_data="daily_toggle")]
+        [InlineKeyboardButton("🎮 لعبة الاقتباسات", callback_data="game")],
+        [InlineKeyboardButton("☀️ تفعيل الاقتباس اليومي", callback_data="daily_on"),
+         InlineKeyboardButton("❌ إيقاف الاقتباس اليومي", callback_data="daily_off")]
     ]
+    markup = InlineKeyboardMarkup(keyboard)
     if update.message:
         await update.message.reply_text(
-            "👋 مرحبا بك في بوت الحكمة واللعب!\nاختر أحد الخيارات أدناه:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    elif update.callback_query:
-        await update.callback_query.message.reply_text(
-            "👋 مرحبا بك في بوت الحكمة واللعب!\nاختر أحد الخيارات أدناه:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "👋 مرحباً بك في بوت الحكمة واللعبة!\nاختر خيارك من الأزرار أدناه.",
+            reply_markup=markup
         )
 
-async def daily_on(uid):
+async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
     if uid not in subscribers:
         subscribers.append(uid)
-        save_subscribers(subscribers)
-        return "✅ تم الاشتراك في الاقتباس اليومي."
+        save_json(SUBSCRIBERS_FILE, {"subs": subscribers})
+        await update.callback_query.answer("✅ تم الاشتراك في الاقتباس اليومي.")
     else:
-        return "أنت مشترك بالفعل."
+        await update.callback_query.answer("أنت مشترك بالفعل.")
 
-async def daily_off(uid):
+async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
     if uid in subscribers:
         subscribers.remove(uid)
-        save_subscribers(subscribers)
-        return "❌ تم إلغاء الاشتراك."
+        save_json(SUBSCRIBERS_FILE, {"subs": subscribers})
+        await update.callback_query.answer("❌ تم إلغاء الاشتراك.")
     else:
-        return "أنت لست مشتركاً."
+        await update.callback_query.answer("أنت لست مشتركاً.")
 
 async def send_daily(app):
     if not subscribers:
@@ -89,14 +83,14 @@ async def send_daily(app):
     for uid in subscribers:
         try:
             await app.bot.send_message(chat_id=uid, text=text)
-        except Exception as e:
-            print("Send error:", e)
+        except:
+            pass
 
 async def daily_scheduler(app):
-    await asyncio.sleep(10)  # أول تنفيذ بعد 10 ثواني
+    await asyncio.sleep(10)  # تأخير أولي
     while True:
         await send_daily(app)
-        await asyncio.sleep(24 * 60 * 60)  # كل 24 ساعة
+        await asyncio.sleep(24*60*60)  # كل 24 ساعة
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
@@ -105,21 +99,14 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         wrong.remove(author)
     options = random.sample(wrong, min(3, len(wrong))) + [author]
     random.shuffle(options)
-    keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
+    keyboard = [[InlineKeyboardButton(opt, callback_data=f"answer:{author}:{opt}")] for opt in options]
 
-    # التعامل مع message أو callback_query
     if update.message:
-        await update.message.reply_text(
-            f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await update.message.reply_text(f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»", reply_markup=InlineKeyboardMarkup(keyboard))
     elif update.callback_query:
-        await update.callback_query.message.reply_text(
-            f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await update.callback_query.edit_message_text(f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»", reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     _, correct, chosen = q.data.split(":")
@@ -131,30 +118,40 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    uid = q.from_user.id
-    if q.data == "game_start":
-        await game(update, context)
-    elif q.data == "daily_toggle":
-        msg = await daily_on(uid) if uid not in subscribers else await daily_off(uid)
-        await q.edit_message_text(msg)
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print(f"حدث خطأ: {context.error}")
 
-# === التشغيل ===
+# ======= Main =======
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(game_start|daily_toggle|game:)"))
 
-    # جدولة الاقتباسات اليومية
+    # Handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(game, pattern="^game$"))
+    app.add_handler(CallbackQueryHandler(daily_on, pattern="^daily_on$"))
+    app.add_handler(CallbackQueryHandler(daily_off, pattern="^daily_off$"))
+    app.add_handler(CallbackQueryHandler(answer, pattern="^answer:"))
+    app.add_error_handler(error_handler)
+
+    # Scheduler
     asyncio.create_task(daily_scheduler(app))
 
-    # تشغيل البوت بالـ polling لتجنب مشاكل Render مع Webhook
-    await app.run_polling()
+    # Webhook للـ Render
+    PORT = int(os.environ.get("PORT", "5000"))
+    HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME", None)
+
+    if not HOST:
+        print("تشغيل polling محلي (للتطوير فقط)")
+        await app.run_polling()
+        return
+
+    WEBHOOK_URL = f"https://{HOST}/{BOT_TOKEN}"
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN,
+        webhook_url=WEBHOOK_URL
+    )
 
 if __name__ == "__main__":
-    import nest_asyncio
-    nest_asyncio.apply()  # لحل مشاكل event loop
-    import asyncio
     asyncio.run(main())
