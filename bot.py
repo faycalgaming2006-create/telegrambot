@@ -1,191 +1,149 @@
+# bot.py — نسخة جاهزة للعمل على Render باستخدام Webhook
 import os
 import json
 import random
 import asyncio
+import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# =============================
-# التوكن واسم الخدمة
-# =============================
-TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
-SERVICE_NAME = "myquotesbot123"  # اسم الخدمة على Render
+# === عيّن توكن البوت هنا (التوكن اللي عندك) ===
+BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
-# =============================
-# تحميل الاقتباسات
-# =============================
+# === تحميل الاقتباسات ===
 with open("quotes.json", "r", encoding="utf-8") as f:
     quotes_data = json.load(f)
-
 all_quotes = [(author, q) for author, quotes in quotes_data.items() for q in quotes]
 
-# =============================
-# تخزين المشتركين
-# =============================
+# === ملفات تخزين بسيطة ===
 SUBSCRIBERS_FILE = "subscribers.json"
+SCORES_FILE = "scores.json"
 
 def load_subscribers():
     if os.path.exists(SUBSCRIBERS_FILE):
-        with open(SUBSCRIBERS_FILE, "r") as f:
+        with open(SUBSCRIBERS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
-def save_subscribers(subs):
-    with open(SUBSCRIBERS_FILE, "w") as f:
-        json.dump(subs, f)
-
-subscribers = load_subscribers()
-
-# =============================
-# تخزين النقاط
-# =============================
-SCORES_FILE = "scores.json"
+def save_subscribers(s):
+    with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(s, f)
 
 def load_scores():
     if os.path.exists(SCORES_FILE):
-        with open(SCORES_FILE, "r") as f:
+        with open(SCORES_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
-def save_scores(scores):
-    with open(SCORES_FILE, "w") as f:
-        json.dump(scores, f)
+def save_scores(s):
+    with open(SCORES_FILE, "w", encoding="utf-8") as f:
+        json.dump(s, f)
 
+subscribers = load_subscribers()
 scores = load_scores()
 
 def add_point(user_id, username):
-    if str(user_id) not in scores:
-        scores[str(user_id)] = {"username": username, "points": 0}
-    scores[str(user_id)]["points"] += 1
+    uid = str(user_id)
+    if uid not in scores:
+        scores[uid] = {"username": username, "points": 0}
+    scores[uid]["points"] += 1
     save_scores(scores)
 
-# =============================
-# أوامر أساسية
-# =============================
+# === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 مرحبًا بك في بوت الاقتباسات!\n\n"
-        "📝 الأوامر:\n"
-        "/daily_on - اشترك في اقتباس يومي\n"
-        "/daily_off - أوقف الاشتراك\n"
-        "/game - ابدأ لعبة 'من قال هذا الاقتباس؟'\n"
-        "/score - اعرض نقاطك\n"
-        "/leaderboard - اعرض أفضل 10 لاعبين\n"
+        "👋 مرحبا! /game للعبة، /daily_on للاشتراك بالاقتباس اليومي."
     )
 
 async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in subscribers:
-        subscribers.append(user_id)
+    uid = update.effective_user.id
+    if uid not in subscribers:
+        subscribers.append(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("✅ تم تفعيل اقتباس يومي لك!")
+        await update.message.reply_text("✅ تم الاشتراك في الاقتباس اليومي.")
     else:
-        await update.message.reply_text("📌 أنت مشترك بالفعل في اقتباس يومي.")
+        await update.message.reply_text("أنت مشترك بالفعل.")
 
 async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id in subscribers:
-        subscribers.remove(user_id)
+    uid = update.effective_user.id
+    if uid in subscribers:
+        subscribers.remove(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("❌ تم إلغاء الاشتراك من اقتباس اليوم.")
+        await update.message.reply_text("❌ تم إلغاء الاشتراك.")
     else:
-        await update.message.reply_text("⚠️ لم تكن مشتركًا.")
+        await update.message.reply_text("أنت لست مشتركاً.")
 
-# =============================
-# إرسال اقتباس يومي
-# =============================
-async def send_daily(context: ContextTypes.DEFAULT_TYPE):
+async def send_daily(app):
     if not subscribers:
         return
     author, quote = random.choice(all_quotes)
     text = f"☀️ اقتباس اليوم:\n\n{quote}\n\n— {author}"
-    for user_id in subscribers:
+    for uid in subscribers:
         try:
-            await context.bot.send_message(chat_id=user_id, text=text)
+            await app.bot.send_message(chat_id=uid, text=text)
         except Exception as e:
-            print(f"خطأ عند الإرسال لـ {user_id}: {e}")
+            print("Send error:", e)
 
-# =============================
-# اللعبة
-# =============================
+async def daily_scheduler(app):
+    # للمراجعة: هنا أول تنفيذ بعد 10 ثواني ثم كل 24 ساعة
+    await asyncio.sleep(10)
+    while True:
+        await send_daily(app)
+        await asyncio.sleep(24 * 60 * 60)
+
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
-    wrong_authors = list(quotes_data.keys())
-    wrong_authors.remove(author)
-    options = random.sample(wrong_authors, 3) + [author]
+    wrong = list(quotes_data.keys())
+    if author in wrong:
+        wrong.remove(author)
+    options = random.sample(wrong, min(3, len(wrong))) + [author]
     random.shuffle(options)
     keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        f"🎮 لعبة: من قال هذا الاقتباس؟\n\n"
-        f"«{quote}»\n",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text(f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    _, correct, chosen = query.data.split(":")
-    user_id = query.from_user.id
-    username = query.from_user.username or query.from_user.first_name
+    q = update.callback_query
+    await q.answer()
+    _, correct, chosen = q.data.split(":")
+    uid = q.from_user.id
+    username = q.from_user.username or q.from_user.first_name
     if correct == chosen:
-        add_point(user_id, username)
-        text = f"✅ صحيح! هذا اقتباس لـ *{correct}*.\n\n+1 نقطة 🎉"
+        add_point(uid, username)
+        await q.edit_message_text(f"✅ صحيح! {correct}\n+1 نقطة")
     else:
-        text = f"❌ خطأ. الإجابة الصحيحة: *{correct}*."
-    await query.edit_message_text(text=text, parse_mode="Markdown")
+        await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-# =============================
-# عرض النقاط والترتيب
-# =============================
-async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if user_id in scores:
-        points = scores[user_id]["points"]
-        await update.message.reply_text(f"📊 نقاطك: {points}")
-    else:
-        await update.message.reply_text("⚠️ ليس لديك نقاط بعد، ابدأ بـ /game")
-
-async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not scores:
-        await update.message.reply_text("⚠️ لا يوجد لاعبون بعد.")
-        return
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1]["points"], reverse=True)
-    top10 = sorted_scores[:10]
-    text = "🏆 أفضل 10 لاعبين:\n\n"
-    for i, (uid, data) in enumerate(top10, start=1):
-        text += f"{i}. {data['username']} — {data['points']} نقطة\n"
-    await update.message.reply_text(text)
-
-# =============================
-# تشغيل البوت مع Webhook على Render
-# =============================
+# === التشغيل مع Webhook (مناسب لــ Render) ===
 async def main():
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    # handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("daily_on", daily_on))
     app.add_handler(CommandHandler("daily_off", daily_off))
     app.add_handler(CommandHandler("game", game))
     app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
-    app.add_handler(CommandHandler("score", score))
-    app.add_handler(CommandHandler("leaderboard", leaderboard))
 
-    # جدولة الاقتباس اليومي
-    app.job_queue.run_repeating(send_daily, interval=86400, first=10)  # كل 24 ساعة، أول تنفيذ بعد 10 ثواني للاختبار
+    # ابدأ المجدول كـ background task
+    # (لا تستخدم job_queue إن لم تكن مركّب الحزمة الخاصة به)
+    asyncio.create_task(daily_scheduler(app))
 
-    PORT = int(os.environ.get("PORT", 8443))
-    WEBHOOK_URL = f"https://{SERVICE_NAME}.onrender.com/{TOKEN}"
+    # إعداد webhook الخاص بـ Render
+    PORT = int(os.environ.get("PORT", "5000"))
+    HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")  # Render يوفر هذا المتغير تلقائياً
+    if not HOST:
+        print("RENDER_EXTERNAL_HOSTNAME غير موجود — سنشغّل polling محلي (للتطوير فقط).")
+        await app.run_polling()
+        return
 
+    WEBHOOK_URL = f"https://{HOST}/{BOT_TOKEN}"
+    # url_path يجب أن يكون نفس الجزء الأخير في webhook_url (بدون /)
     await app.run_webhook(
-    listen="0.0.0.0",
-    port=int(os.environ.get("PORT", 5000)),
-    url_path=TOKEN,
-    webhook_url=f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN,      # path بدون slash
+        webhook_url=WEBHOOK_URL  # https://<your-service>.onrender.com/<TOKEN>
     )
 
 if __name__ == "__main__":
-    import nest_asyncio
-    nest_asyncio.apply()
-    import asyncio
-    asyncio.get_event_loop().run_until_complete(main())
-
+    asyncio.run(main())
