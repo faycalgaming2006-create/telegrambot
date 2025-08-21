@@ -1,21 +1,17 @@
-# bot.py — نسخة جاهزة للعمل على Render باستخدام Polling
+# bot.py — نسخة جاهزة للـ Render
 import os
 import json
 import random
 import asyncio
-import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# === التوكن الخاص بالبوت ===
 BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
-# === تحميل الاقتباسات ===
 with open("quotes.json", "r", encoding="utf-8") as f:
     quotes_data = json.load(f)
 all_quotes = [(author, q) for author, quotes in quotes_data.items() for q in quotes]
 
-# === ملفات تخزين بسيطة ===
 SUBSCRIBERS_FILE = "subscribers.json"
 SCORES_FILE = "scores.json"
 
@@ -49,7 +45,6 @@ def add_point(user_id, username):
     scores[uid]["points"] += 1
     save_scores(scores)
 
-# === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 مرحبا! استخدم:\n/game للعبة 🎮\n/daily_on للاشتراك بالاقتباس اليومي ☀️\n/daily_off لإلغاء الاشتراك ❌"
@@ -85,10 +80,10 @@ async def send_daily(app):
             print("Send error:", e)
 
 async def daily_scheduler(app):
-    await asyncio.sleep(10)  # أول مرة بعد 10 ثواني
+    await asyncio.sleep(10)
     while True:
         await send_daily(app)
-        await asyncio.sleep(24 * 60 * 60)  # بعدها كل 24 ساعة
+        await asyncio.sleep(24 * 60 * 60)
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
@@ -112,23 +107,17 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-# === التشغيل (Polling) ===
-async def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+# ——— هنا التشغيل بدون asyncio.run() ———
+app = Application.builder().token(BOT_TOKEN).build()
 
-    # handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("daily_on", daily_on))
-    app.add_handler(CommandHandler("daily_off", daily_off))
-    app.add_handler(CommandHandler("game", game))
-    app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("daily_on", daily_on))
+app.add_handler(CommandHandler("daily_off", daily_off))
+app.add_handler(CommandHandler("game", game))
+app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
 
-    # المجدول
-    asyncio.create_task(daily_scheduler(app))
+# شغّل المجدول كـ background task
+asyncio.create_task(daily_scheduler(app))
 
-    # شغل Polling بدل Webhook
-    await app.run_polling()
-
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+# شغّل البوت بالـ Polling مباشرة
+app.run_polling()
