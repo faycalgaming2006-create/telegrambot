@@ -177,9 +177,10 @@ async def main():
     WEBHOOK_URL = f"https://{SERVICE_NAME}.onrender.com/{TOKEN}"
 
     await app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=WEBHOOK_URL
+    listen="0.0.0.0",
+    port=int(os.environ.get("PORT", 5000)),
+    url_path=TOKEN,
+    webhook_url=f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     )
 
 if __name__ == "__main__":
@@ -187,3 +188,4 @@ if __name__ == "__main__":
     nest_asyncio.apply()
     import asyncio
     asyncio.get_event_loop().run_until_complete(main())
+
