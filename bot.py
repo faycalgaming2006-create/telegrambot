@@ -1,9 +1,8 @@
-# bot.py — نسخة جاهزة للعمل على Render باستخدام Polling
+# bot.py — نسخة محسنة للبوت
 import os
 import json
 import random
 import asyncio
-import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -77,15 +76,15 @@ async def send_daily(app):
     if not subscribers:
         return
     author, quote = random.choice(all_quotes)
-    text = f"☀️ اقتباس اليوم:\n\n{quote}\n\n— {author}"
+    text = f"☀️ *اقتباس اليوم:*\n\n_{quote}_\n\n— *{author}*"
     for uid in subscribers:
         try:
-            await app.bot.send_message(chat_id=uid, text=text)
+            await app.bot.send_message(chat_id=uid, text=text, parse_mode="Markdown")
         except Exception as e:
             print("Send error:", e)
 
 async def daily_scheduler(app):
-    await asyncio.sleep(10)  # الانتظار قبل أول إرسال
+    await asyncio.sleep(10)  # تأخير أول إرسال
     while True:
         await send_daily(app)
         await asyncio.sleep(24 * 60 * 60)  # كل 24 ساعة
@@ -97,8 +96,12 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         wrong.remove(author)
     options = random.sample(wrong, min(3, len(wrong))) + [author]
     random.shuffle(options)
-    keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
-    await update.message.reply_text(f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»", reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard = [
+        [InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}") for opt in options[:2]],
+        [InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}") for opt in options[2:]]
+    ]
+    await update.message.reply_text(f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»",
+                                    reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -108,11 +111,11 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = q.from_user.username or q.from_user.first_name
     if correct == chosen:
         add_point(uid, username)
-        await q.edit_message_text(f"✅ صحيح! {correct}\n+1 نقطة")
+        await q.edit_message_text(f"✅ صحيح! {correct}\n🎯 {username} لديك الآن {scores[str(uid)]['points']} نقاط")
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-# === التشغيل مع Polling لتجنب مشاكل event loop على Render ===
+# === التشغيل ===
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -123,14 +126,15 @@ async def main():
     app.add_handler(CommandHandler("game", game))
     app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
 
-    # ابدأ المجدول كـ background task
+    # بدء المجدول
     asyncio.create_task(daily_scheduler(app))
 
-    # تشغيل polling
+    # تشغيل البوت باستخدام polling (آمن على Render)
     await app.run_polling()
 
 if __name__ == "__main__":
     import nest_asyncio
     nest_asyncio.apply()
     import asyncio
-    asyncio.get_event_loop().run_until_complete(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
