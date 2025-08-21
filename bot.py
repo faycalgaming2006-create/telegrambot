@@ -1,7 +1,15 @@
+import os
+import json
+import random
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-import random, json, os, datetime
-import asyncio
+
+# =============================
+# التوكن واسم الخدمة
+# =============================
+TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
+SERVICE_NAME = "myquotesbot123"  # اسم الخدمة على Render
 
 # =============================
 # تحميل الاقتباسات
@@ -102,18 +110,12 @@ async def send_daily(context: ContextTypes.DEFAULT_TYPE):
 # =============================
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
-
     wrong_authors = list(quotes_data.keys())
     wrong_authors.remove(author)
     options = random.sample(wrong_authors, 3) + [author]
     random.shuffle(options)
-
-    keyboard = [
-        [InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")]
-        for opt in options
-    ]
+    keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(
         f"🎮 لعبة: من قال هذا الاقتباس؟\n\n"
         f"«{quote}»\n",
@@ -123,17 +125,14 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     _, correct, chosen = query.data.split(":")
     user_id = query.from_user.id
     username = query.from_user.username or query.from_user.first_name
-
     if correct == chosen:
         add_point(user_id, username)
         text = f"✅ صحيح! هذا اقتباس لـ *{correct}*.\n\n+1 نقطة 🎉"
     else:
         text = f"❌ خطأ. الإجابة الصحيحة: *{correct}*."
-
     await query.edit_message_text(text=text, parse_mode="Markdown")
 
 # =============================
@@ -151,32 +150,18 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not scores:
         await update.message.reply_text("⚠️ لا يوجد لاعبون بعد.")
         return
-
     sorted_scores = sorted(scores.items(), key=lambda x: x[1]["points"], reverse=True)
     top10 = sorted_scores[:10]
-
     text = "🏆 أفضل 10 لاعبين:\n\n"
     for i, (uid, data) in enumerate(top10, start=1):
         text += f"{i}. {data['username']} — {data['points']} نقطة\n"
-
     await update.message.reply_text(text)
 
 # =============================
-# post_init لتسجيل المهمة اليومية
-# =============================
-async def daily_post_init(app):
-    async def schedule_daily(context):
-        await send_daily(context)
-    app.job_queue.run_daily(schedule_daily, time=datetime.time(hour=9, minute=0, second=0))
-
-# =============================
-# تشغيل البوت
+# تشغيل البوت مع Webhook على Render
 # =============================
 async def main():
-    TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
-    app = Application.builder().token(TOKEN).post_init(daily_post_init).build()
-
-    # إضافة الأوامر
+    app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("daily_on", daily_on))
     app.add_handler(CommandHandler("daily_off", daily_off))
@@ -185,11 +170,20 @@ async def main():
     app.add_handler(CommandHandler("score", score))
     app.add_handler(CommandHandler("leaderboard", leaderboard))
 
-    print("✅ البوت شغال ...")
-    await app.run_polling()
+    # جدولة الاقتباس اليومي
+    app.job_queue.run_repeating(send_daily, interval=86400, first=10)  # كل 24 ساعة، أول تنفيذ بعد 10 ثواني للاختبار
 
+    PORT = int(os.environ.get("PORT", 8443))
+    WEBHOOK_URL = f"https://{SERVICE_NAME}.onrender.com/{TOKEN}"
+
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=WEBHOOK_URL
+    )
 
 if __name__ == "__main__":
+    import nest_asyncio
+    nest_asyncio.apply()
     import asyncio
     asyncio.get_event_loop().run_until_complete(main())
-
