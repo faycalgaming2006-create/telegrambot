@@ -1,3 +1,5 @@
+import nest_asyncio
+nest_asyncio.apply()
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import random, json, os, datetime
@@ -193,3 +195,4 @@ if __name__ == "__main__":
     import nest_asyncio
     nest_asyncio.apply()  # يسمح بتشغيل loop داخل loop
     asyncio.get_event_loop().run_until_complete(main())
+
