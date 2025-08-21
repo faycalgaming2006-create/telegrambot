@@ -1,4 +1,4 @@
-# bot.py — نسخة جاهزة للعمل على Render باستخدام Webhook
+# bot.py — نسخة جاهزة للعمل على Render باستخدام Polling
 import os
 import json
 import random
@@ -7,7 +7,7 @@ import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# === عيّن توكن البوت هنا (التوكن اللي عندك) ===
+# === التوكن الخاص بالبوت ===
 BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
 # === تحميل الاقتباسات ===
@@ -52,7 +52,7 @@ def add_point(user_id, username):
 # === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 مرحبا! /game للعبة، /daily_on للاشتراك بالاقتباس اليومي."
+        "👋 مرحبا! استخدم:\n/game للعبة 🎮\n/daily_on للاشتراك بالاقتباس اليومي ☀️\n/daily_off لإلغاء الاشتراك ❌"
     )
 
 async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -85,11 +85,10 @@ async def send_daily(app):
             print("Send error:", e)
 
 async def daily_scheduler(app):
-    # للمراجعة: هنا أول تنفيذ بعد 10 ثواني ثم كل 24 ساعة
-    await asyncio.sleep(10)
+    await asyncio.sleep(10)  # أول مرة بعد 10 ثواني
     while True:
         await send_daily(app)
-        await asyncio.sleep(24 * 60 * 60)
+        await asyncio.sleep(24 * 60 * 60)  # بعدها كل 24 ساعة
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
@@ -113,7 +112,7 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}")
 
-# === التشغيل مع Webhook (مناسب لــ Render) ===
+# === التشغيل (Polling) ===
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -124,26 +123,12 @@ async def main():
     app.add_handler(CommandHandler("game", game))
     app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
 
-    # ابدأ المجدول كـ background task
-    # (لا تستخدم job_queue إن لم تكن مركّب الحزمة الخاصة به)
+    # المجدول
     asyncio.create_task(daily_scheduler(app))
 
-    # إعداد webhook الخاص بـ Render
-    PORT = int(os.environ.get("PORT", "5000"))
-    HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")  # Render يوفر هذا المتغير تلقائياً
-    if not HOST:
-        print("RENDER_EXTERNAL_HOSTNAME غير موجود — سنشغّل polling محلي (للتطوير فقط).")
-        await app.run_polling()
-        return
-
-    WEBHOOK_URL = f"https://{HOST}/{BOT_TOKEN}"
-    # url_path يجب أن يكون نفس الجزء الأخير في webhook_url (بدون /)
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=BOT_TOKEN,      # path بدون slash
-        webhook_url=WEBHOOK_URL  # https://<your-service>.onrender.com/<TOKEN>
-    )
+    # شغل Polling بدل Webhook
+    await app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
