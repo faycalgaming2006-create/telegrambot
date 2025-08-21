@@ -1,8 +1,8 @@
-# bot_polling.py — نسخة جاهزة على Render مع Polling
-import os
-import json
-import random
+# bot_render.py
 import asyncio
+import json
+import os
+import random
 import nest_asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -13,6 +13,7 @@ BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
 with open("quotes.json", "r", encoding="utf-8") as f:
     quotes_data = json.load(f)
+
 all_quotes = [(author, q) for author, quotes in quotes_data.items() for q in quotes]
 
 SUBSCRIBERS_FILE = "subscribers.json"
@@ -24,9 +25,9 @@ def load_subscribers():
             return json.load(f)
     return []
 
-def save_subscribers(s):
+def save_subscribers(subs):
     with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(s, f)
+        json.dump(subs, f)
 
 def load_scores():
     if os.path.exists(SCORES_FILE):
@@ -34,9 +35,9 @@ def load_scores():
             return json.load(f)
     return {}
 
-def save_scores(s):
+def save_scores(scores):
     with open(SCORES_FILE, "w", encoding="utf-8") as f:
-        json.dump(s, f)
+        json.dump(scores, f)
 
 subscribers = load_subscribers()
 scores = load_scores()
@@ -50,10 +51,9 @@ def add_point(user_id, username):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "👋 مرحباً بك أيها المستكشف للفكر والحكمة!\n\n"
-        "🌟 اكتشف اقتباسات ملهمة يومياً.\n"
-        "🎮 جرب حظك ومعرفتك بالأقوال.\n\n"
-        "اضغط على زر 'اللعبة' لتبدأ مغامرتك!"
+        "👋 أهلاً بك في عالم الحكمة والاقتباسات!\n\n"
+        "🌟 اكتشف اقتباس اليوم أو جرب حظك بالألعاب الفكرية.\n\n"
+        "اضغط على زر '🎲 اللعبة' للبدء!"
     )
     keyboard = [[InlineKeyboardButton("🎲 اللعبة", callback_data="start_game")]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -63,7 +63,7 @@ async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid not in subscribers:
         subscribers.append(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("✅ تم الاشتراك في الاقتباس اليومي.")
+        await update.message.reply_text("✅ تم الاشتراك بالاقتباسات اليومية.")
     else:
         await update.message.reply_text("أنت مشترك بالفعل.")
 
@@ -102,7 +102,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     random.shuffle(options)
     keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
     await update.message.reply_text(
-        f"🎮 من قال هذا الاقتباس الحكيم؟\n\n«{quote}»",
+        f"🎮 من قال هذا الاقتباس؟\n\n«{quote}»",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -127,12 +127,11 @@ async def main():
     app.add_handler(CallbackQueryHandler(game_answer, pattern="^game:"))
     app.add_handler(CallbackQueryHandler(lambda u,c: asyncio.create_task(game(u,c)), pattern="start_game"))
 
-    # بدء المجدول
+    # تشغيل المجدول
     asyncio.create_task(daily_scheduler(app))
 
-    # تشغيل Polling
+    # تشغيل Polling فقط
     await app.run_polling()
 
-# تشغيل البوت
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
