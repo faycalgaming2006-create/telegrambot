@@ -1,25 +1,20 @@
-# bot.py — نسخة جاهزة للعمل على Render باستخدام Webhook
+# bot_polling.py — نسخة جاهزة على Render مع Polling
 import os
 import json
 import random
 import asyncio
-import datetime
 import nest_asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# === تفعيل nest_asyncio لحل مشاكل event loop ===
 nest_asyncio.apply()
 
-# === توكن البوت ===
 BOT_TOKEN = "8343481325:AAGk1Mro9_LgeSZoq4m_WnfGNfYzg6j8OeM"
 
-# === تحميل الاقتباسات ===
 with open("quotes.json", "r", encoding="utf-8") as f:
     quotes_data = json.load(f)
 all_quotes = [(author, q) for author, quotes in quotes_data.items() for q in quotes]
 
-# === ملفات تخزين بسيطة ===
 SUBSCRIBERS_FILE = "subscribers.json"
 SCORES_FILE = "scores.json"
 
@@ -53,7 +48,6 @@ def add_point(user_id, username):
     scores[uid]["points"] += 1
     save_scores(scores)
 
-# === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "👋 مرحباً بك أيها المستكشف للفكر والحكمة!\n\n"
@@ -69,18 +63,18 @@ async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uid not in subscribers:
         subscribers.append(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("✅ تم الاشتراك في الاقتباس اليومي. استعد للحكمة كل صباح!")
+        await update.message.reply_text("✅ تم الاشتراك في الاقتباس اليومي.")
     else:
-        await update.message.reply_text("أنت مشترك بالفعل. 🌞")
+        await update.message.reply_text("أنت مشترك بالفعل.")
 
 async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid in subscribers:
         subscribers.remove(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("❌ تم إلغاء الاشتراك. لن تصلك الاقتباسات بعد اليوم.")
+        await update.message.reply_text("❌ تم إلغاء الاشتراك.")
     else:
-        await update.message.reply_text("أنت لست مشتركاً بالفعل. 🤔")
+        await update.message.reply_text("أنت لست مشتركاً.")
 
 async def send_daily(app):
     if not subscribers:
@@ -94,10 +88,10 @@ async def send_daily(app):
             print("Send error:", e)
 
 async def daily_scheduler(app):
-    await asyncio.sleep(10)  # تأخير أولي
+    await asyncio.sleep(10)
     while True:
         await send_daily(app)
-        await asyncio.sleep(24 * 60 * 60)  # كل 24 ساعة
+        await asyncio.sleep(24 * 60 * 60)
 
 async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     author, quote = random.choice(all_quotes)
@@ -120,7 +114,7 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = q.from_user.username or q.from_user.first_name
     if correct == chosen:
         add_point(uid, username)
-        await q.edit_message_text(f"✅ صحيح! {correct}\n+1 نقطة للفكر 🏆")
+        await q.edit_message_text(f"✅ صحيح! {correct}\n+1 نقطة 🏆")
     else:
         await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: {correct}\nحاول مجدداً!")
 
@@ -136,21 +130,8 @@ async def main():
     # بدء المجدول
     asyncio.create_task(daily_scheduler(app))
 
-    # إعداد Webhook لـ Render
-    PORT = int(os.environ.get("PORT", "5000"))
-    HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
-    if not HOST:
-        print("RENDER_EXTERNAL_HOSTNAME غير موجود، تشغيل polling محلي (للتطوير فقط).")
-        await app.run_polling()
-        return
-
-    WEBHOOK_URL = f"https://{HOST}/{BOT_TOKEN}"
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=BOT_TOKEN,
-        webhook_url=WEBHOOK_URL
-    )
+    # تشغيل Polling
+    await app.run_polling()
 
 # تشغيل البوت
 loop = asyncio.get_event_loop()
