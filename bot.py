@@ -1,9 +1,8 @@
-# bot.py — نسخة جاهزة للبوت مع الزينة والأزرار
+# bot.py — نسخة فنية وفلسفية للبوت
 import os
 import json
 import random
 import asyncio
-import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -52,40 +51,41 @@ def add_point(user_id, username):
 # === أوامر البوت ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("🎮 العب اللعبة", callback_data="start_game")],
-        [InlineKeyboardButton("☀️ الاقتباس اليومي", callback_data="daily_quote")]
+        [InlineKeyboardButton("🎮 إبدأ اللعبة", callback_data="start_game")],
+        [InlineKeyboardButton("☀️ اقتباس اليومي", callback_data="daily_quote")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     welcome_text = (
-        "👋 مرحبا بك في بوت الاقتباسات والألعاب!\n\n"
-        "اضغط على الأزرار للبدء باللعبة أو استلام الاقتباس اليومي.\n"
-        "استمتع واستفد من حكم وأقوال ملهمة!"
+        "🌿 *مرحباً بك في عالم الحكمة والألعاب!* 🌿\n\n"
+        "في هذا البوت ستجد متعة التفكير، واختبار معرفتك بالحكمة.\n"
+        "اضغط على الأزرار أدناه للبدء باللعبة أو لاستلام اقتباس ملهم اليوم.\n"
+        "_تذكر: كل اقتباس يحمل درسًا، وكل لعبة رحلة نحو المعرفة._"
     )
-    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="Markdown")
 
 async def daily_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid not in subscribers:
         subscribers.append(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("✅ تم الاشتراك في الاقتباس اليومي.")
+        await update.message.reply_text("✅ تم الاشتراك! ستصلك حكمة يومية لتضيء يومك.")
     else:
-        await update.message.reply_text("أنت مشترك بالفعل.")
+        await update.message.reply_text("أنت مشترك بالفعل. الحكمة قادمة إليك كل يوم 🌟")
 
 async def daily_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid in subscribers:
         subscribers.remove(uid)
         save_subscribers(subscribers)
-        await update.message.reply_text("❌ تم إلغاء الاشتراك.")
+        await update.message.reply_text("❌ تم إلغاء الاشتراك. سنفتقد حكمتك اليومية 😔")
     else:
-        await update.message.reply_text("أنت لست مشتركاً.")
+        await update.message.reply_text("أنت لست مشتركاً. ابدأ الاشتراك لتستمتع بالحكمة اليومية 🌿")
 
 async def send_daily(app):
     if not subscribers:
         return
     author, quote = random.choice(all_quotes)
-    text = f"☀️ *اقتباس اليوم:*\n\n_{quote}_\n\n— *{author}*"
+    text = f"☀️ *حكمة اليوم*\n\n_{quote}_\n\n— *{author}*"
     for uid in subscribers:
         try:
             await app.bot.send_message(chat_id=uid, text=text, parse_mode="Markdown")
@@ -107,7 +107,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     random.shuffle(options)
     keyboard = [[InlineKeyboardButton(opt, callback_data=f"game:{author}:{opt}")] for opt in options]
     await update.message.reply_text(
-        f"🎮 *من قال هذا الاقتباس؟*\n\n«{quote}»",
+        f"🎲 *من قال هذا الاقتباس؟*\n\n«{quote}»",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -120,9 +120,9 @@ async def game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = q.from_user.username or q.from_user.first_name
     if correct == chosen:
         add_point(uid, username)
-        await q.edit_message_text(f"✅ صحيح! الإجابة: *{correct}*\n+1 نقطة", parse_mode="Markdown")
+        await q.edit_message_text(f"✅ رائع! الإجابة الصحيحة: *{correct}*\n+1 نقطة 🌟", parse_mode="Markdown")
     else:
-        await q.edit_message_text(f"❌ خطأ. الإجابة الصحيحة: *{correct}*", parse_mode="Markdown")
+        await q.edit_message_text(f"❌ للأسف خطأ. الإجابة الصحيحة: *{correct}*", parse_mode="Markdown")
 
 # === التعامل مع أزرار الترحيب ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
